@@ -1,0 +1,83 @@
+# ============================================================
+# PROJECT STRUCTURE & QUICKSTART
+# Bus Overcrowding Detection System — Edge AI
+# ============================================================
+
+bus_overcrowding/
+├── main.py             ← Unified entry point (inference + dashboard)
+├── config.py           ← All tunable settings (capacity, thresholds, paths)
+├── logger.py           ← Structured loguru logging
+├── utils.py            ← DB helpers, AlertManager, annotation, FPS meter
+├── preprocessing.py    ← Dataset prep: resize, split, augment, YAML gen
+├── training.py         ← YOLOv8 fine-tuning (primary + secondary models)
+├── inference.py        ← Real-time YOLO + DeepSORT pipeline
+├── requirements.txt    ← All dependencies
+│
+├── data/
+│   ├── raw/            ← Put YOUR raw images + .txt YOLO labels here
+│   ├── processed/      ← Intermediate preprocessed files
+│   └── dataset/        ← Auto-generated YOLO-format dataset
+│       ├── train/images/
+│       ├── train/labels/
+│       ├── val/images/
+│       ├── val/labels/
+│       ├── test/images/
+│       ├── test/labels/
+│       └── dataset.yaml
+│
+├── models/             ← Trained weights stored here
+├── runs/               ← Ultralytics training run artifacts
+├── logs/               ← Rotating log files
+├── alert_snapshots/    ← JPEG snapshots saved on each alert
+└── alerts.db           ← SQLite database (events only, no raw video)
+
+# ─────────────────────────────────────────────
+# QUICKSTART
+# ─────────────────────────────────────────────
+
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2a. Use COCO-pretrained weights directly (no custom training needed)
+#     The system will auto-download yolov8n.pt on first run.
+python main.py --mode inference
+
+# 2b. OR train on your own bus-interior dataset first:
+#     Place images + YOLO .txt label files in data/raw/
+python main.py --mode train --preprocess
+
+# 3. Run full system (inference + web dashboard)
+python main.py --mode both
+
+# 4. View dashboard
+#    Open browser: http://localhost:5000
+
+# ─────────────────────────────────────────────
+# USEFUL FLAGS
+# ─────────────────────────────────────────────
+
+# Run on video file instead of live camera
+python main.py --source path/to/video.mp4
+
+# Headless mode (no OpenCV window — for Raspberry Pi / server)
+python main.py --no-display
+
+# Select compute device
+python main.py --device cuda   # NVIDIA GPU
+python main.py --device mps    # Apple Silicon
+python main.py --device cpu    # Default
+
+# Only run dashboard (to review existing alerts)
+python main.py --mode dashboard
+
+# ─────────────────────────────────────────────
+# KEY CONFIGURATION (edit config.py)
+# ─────────────────────────────────────────────
+
+# MAX_CAPACITY    = 40        <- legal limit for your bus
+# WARNING_RATIO   = 0.85      <- warn at 85% full
+# BUS_ID          = "BUS-001" <- unique bus identifier
+# FINE_AMOUNT_INR = 5000      <- fine raised when overcrowded
+# USE_ENSEMBLE    = True      <- use both yolov8n + yolov8s for reliability
+# CAMERA_ID       = 0         <- webcam index or RTSP URL
+# BLUR_FACES      = False     <- enable for strict privacy mode

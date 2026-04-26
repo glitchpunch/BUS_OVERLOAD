@@ -1,0 +1,57 @@
+# ============================================================
+# requirements.txt — Bus Overcrowding Detection System
+# ============================================================
+# Install with:  pip install -r requirements.txt
+#
+# Edge device tip (Raspberry Pi / Jetson):
+#   • Replace torch/torchvision with wheel from pytorch.org/get-started/locally
+#   • For Jetson: use NVIDIA's L4T PyTorch wheel
+#   • Use ultralytics[export] for ONNX/TensorRT export support
+# ============================================================
+
+# ─── Core deep learning ───────────────────────────────────────────────
+torch>=2.1.0
+torchvision>=0.16.0
+
+# ─── YOLOv8 (Ultralytics) ─────────────────────────────────────────────
+ultralytics>=8.2.0            # YOLOv8 detection, pose, export
+
+# ─── Tracking ─────────────────────────────────────────────────────────
+deep-sort-realtime>=1.3.2     # DeepSORT with MobileNet Re-ID embedder
+
+# ─── Computer Vision ──────────────────────────────────────────────────
+opencv-python-headless>=4.9.0 # Use opencv-python if you need GUI display
+numpy>=1.24.0,<2.0.0          # Pinned <2 for torch compatibility
+
+# ─── Web dashboard ────────────────────────────────────────────────────
+flask>=3.0.0
+
+# ─── Database ─────────────────────────────────────────────────────────
+# sqlite3 is part of Python stdlib — no extra install needed
+
+# ─── Logging ──────────────────────────────────────────────────────────
+loguru>=0.7.2
+
+# ─── Data / augmentation utilities ───────────────────────────────────
+Pillow>=10.0.0                 # Image I/O used by Ultralytics internally
+scipy>=1.11.0                  # Used by DeepSORT Kalman filter
+scikit-learn>=1.3.0            # Cosine distance in Re-ID matching
+
+# ─── ONNX export (for edge deployment) ───────────────────────────────
+onnx>=1.15.0
+onnxruntime>=1.17.0            # For CPU inference without PyTorch on edge
+# onnxruntime-gpu>=1.17.0      # Uncomment for GPU edge devices
+
+# ─── Optional: TensorRT (Jetson / NVIDIA edge) ───────────────────────
+# tensorrt                     # Install from NVIDIA JetPack / TensorRT SDK
+
+# ─── Dev / testing ────────────────────────────────────────────────────
+tqdm>=4.66.0                   # Progress bars during training/preprocessing
+matplotlib>=3.8.0              # Training curve plots (used by Ultralytics)
+seaborn>=0.13.0                # Confusion matrix heatmaps
+pandas>=2.1.0                  # Metrics CSV parsing
+
+# ─── Linting / formatting (dev only) ─────────────────────────────────
+# flake8>=7.0.0
+# black>=24.0.0
+# isort>=5.13.0
