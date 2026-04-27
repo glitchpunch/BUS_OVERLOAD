@@ -199,8 +199,8 @@ bus_overcrowding/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/bus-overcrowding-detection.git
-cd bus-overcrowding-detection
+git clone https://github.com/glitchpunch/BUS_OVERLOAD.git
+cd BUS_OVERLOAD
 ```
 
 ### 2. Create a Virtual Environment
