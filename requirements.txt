@@ -1,13 +1,4 @@
-# ============================================================
-# requirements.txt — Bus Overcrowding Detection System
-# ============================================================
 # Install with:  pip install -r requirements.txt
-#
-# Edge device tip (Raspberry Pi / Jetson):
-#   • Replace torch/torchvision with wheel from pytorch.org/get-started/locally
-#   • For Jetson: use NVIDIA's L4T PyTorch wheel
-#   • Use ultralytics[export] for ONNX/TensorRT export support
-# ============================================================
 
 # ─── Core deep learning ───────────────────────────────────────────────
 torch>=2.1.0
