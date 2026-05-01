@@ -1,7 +1,3 @@
-# ============================================================
-# inference.py — Real-Time Inference Engine  v2.0
-# 4-Model Ensemble | Count Stabiliser | Fixed Display Dims
-# ============================================================
 """
 Usage:
     python inference.py --source bus_video.mp4          # demo video
@@ -24,11 +20,6 @@ from utils import (
     annotate_frame, blur_faces, ensemble_count,
     init_db, letterbox_to_display,
 )
-
-
-# ─────────────────────────────────────────────
-# SINGLE YOLO DETECTOR WRAPPER
-# ─────────────────────────────────────────────
 
 class YOLODetector:
     """
@@ -79,11 +70,6 @@ class YOLODetector:
                 dets.append([x1, y1, x2, y2, conf])
         return dets, len(dets)
 
-
-# ─────────────────────────────────────────────
-# 4-MODEL ENSEMBLE MANAGER
-# ─────────────────────────────────────────────
-
 class EnsembleDetector:
     """
     Loads up to 4 YOLOv8 detectors (n / s / m / l) and runs them
@@ -105,22 +91,25 @@ class EnsembleDetector:
         logger.info(f"Ensemble: {len(self.detectors)} models loaded "
                     f"({[d.label for d in self.detectors]})")
 
-    def run(self, frame: np.ndarray) -> Tuple[List, Dict[str, int], int, int]:
+    def run(self, frame: np.ndarray) -> Tuple[List, Dict[str, int], int, Dict[str, float]]:
         """
         Returns
         -------
-        all_dets    : merged + NMS'd detection list  [[x1,y1,x2,y2,conf],…]
-        model_counts: {label: count} per model
-        raw_ensemble: ensemble count BEFORE stabilisation
+        all_dets     : merged + NMS'd detection list  [[x1,y1,x2,y2,conf],…]
+        model_counts : {label: count} per model
+        raw_ensemble : ensemble count BEFORE stabilisation
+        latencies    : {label: elapsed_seconds} per model
         """
         all_dets: List[List[float]] = []
         model_counts: Dict[str, int] = {}
+        latencies: Dict[str, float] = {}
         counts:  List[int] = []
         weights: List[int] = []
 
         for det in self.detectors:
-            with log_time(det.label):
-                dets, count = det.detect(frame)
+            t0 = time.time()
+            dets, count = det.detect(frame)
+            latencies[det.label] = time.time() - t0
             model_counts[det.label] = count
             counts.append(count)
             weights.append(det.weight)
@@ -132,7 +121,7 @@ class EnsembleDetector:
         # Ensemble count strategy
         raw_ensemble = ensemble_count(counts, weights, config.ENSEMBLE_STRATEGY)
 
-        return all_dets, model_counts, raw_ensemble
+        return all_dets, model_counts, raw_ensemble, latencies
 
     @property
     def primary_dets_source(self):
@@ -171,11 +160,6 @@ def _nms_merge(
 
     kept = [dets[i] for i in indices.flatten()]
     return kept
-
-
-# ─────────────────────────────────────────────
-# DEEPSORT TRACKER
-# ─────────────────────────────────────────────
 
 class DeepSORTTracker:
     def __init__(self):
@@ -249,11 +233,6 @@ def _iou(a, b):
     ua    = (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - inter
     return inter / (ua + 1e-6)
 
-
-# ─────────────────────────────────────────────
-# VIDEO CAPTURE HELPER
-# ─────────────────────────────────────────────
-
 def open_source(source) -> cv2.VideoCapture:
     """Open camera / video file and return a configured VideoCapture."""
     if str(source).isdigit():
@@ -282,11 +261,6 @@ def get_video_writer(cap: cv2.VideoCapture, out_path: Path) -> Optional[cv2.Vide
     writer = cv2.VideoWriter(str(out_path), fourcc, fps, (config.DISPLAY_WIDTH, config.DISPLAY_HEIGHT))
     logger.info(f"Output video: {out_path}  ({config.DISPLAY_WIDTH}x{config.DISPLAY_HEIGHT} @ {fps}fps)")
     return writer
-
-
-# ─────────────────────────────────────────────
-# MAIN INFERENCE LOOP
-# ─────────────────────────────────────────────
 
 def run_inference(
     source=config.CAMERA_ID,
@@ -356,10 +330,16 @@ def run_inference(
                 frame = blur_faces(frame)
 
             # ── Ensemble detection ─────────────────────────────────────
-            all_dets, model_counts, raw_ensemble = ensemble.run(frame)
+            all_dets, model_counts, raw_ensemble, latencies = ensemble.run(frame)
+
+            # Record per-model latency for the FPS panel
+            for lbl, elapsed in latencies.items():
+                fps_meter.record(lbl, elapsed)
 
             # ── DeepSORT tracking ──────────────────────────────────────
+            t_ds = time.time()
             tracks = tracker.update(all_dets, frame)
+            fps_meter.record("DeepSORT", time.time() - t_ds)
 
             # Prefer confirmed track count (more stable than raw NMS count)
             confirmed = sum(1 for t in tracks if _simple_is_confirmed(t))
@@ -371,7 +351,7 @@ def run_inference(
             # ── Alert logic ────────────────────────────────────────────
             status = alert_mgr.update(stable_count, frame)
 
-            # ── FPS ────────────────────────────────────────────────────
+            # ── FPS (tick AFTER all processing) ───────────────────────
             fps = fps_meter.tick()
 
             # ── Annotate ───────────────────────────────────────────────
@@ -383,10 +363,13 @@ def run_inference(
                 model_counts = model_counts,
                 raw_count    = raw_count,
             )
-            fps_meter.draw(annotated, fps)
 
             # ── Letterbox to fixed display size ───────────────────────
             display = letterbox_to_display(annotated)
+
+            # ── Draw FPS panel on DISPLAY frame (AFTER letterbox) ─────
+            # This is the fix: drawing BEFORE letterbox caused it to disappear
+            fps_meter.draw_overlay(display, fps)
 
             if show:
                 cv2.imshow("Bus Overcrowding Detection", display)
@@ -421,6 +404,17 @@ def run_inference(
             logger.info(f"Output video saved: {out_path}")
         if show:
             cv2.destroyAllWindows()
+        # Save FPS log CSV for report graphs
+        if fps_meter._fps_log:
+            fps_meter.save_fps_log(str(config.LOGS_DIR / "fps_log.csv"))
+        # Print final FPS summary
+        if len(fps_meter._fps_log) > 5:
+            all_fps = [f for _, f in fps_meter._fps_log]
+            logger.info(
+                f"FPS SUMMARY | avg={sum(all_fps)/len(all_fps):.1f} "
+                f"min={min(all_fps):.1f} max={max(all_fps):.1f} "
+                f"frames_processed={proc_count}"
+            )
         logger.info("Done.")
 
 
@@ -436,11 +430,6 @@ def _manual_snap(frame, count, status):
     path = config.ALERTS_IMG_DIR / f"manual_{status}_{count}_{ts}.jpg"
     cv2.imwrite(str(path), frame)
     logger.info(f"Snapshot: {path}")
-
-
-# ─────────────────────────────────────────────
-# CLI
-# ─────────────────────────────────────────────
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Bus Overcrowding — Inference v2.0")
