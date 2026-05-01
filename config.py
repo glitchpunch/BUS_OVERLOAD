@@ -1,13 +1,5 @@
-# ============================================================
-# config.py — Central Configuration for Bus Overcrowding Detection
-# v2.0 — 4-Model Ensemble | Temporal Smoothing | Fixed Display
-# ============================================================
-
 from pathlib import Path
 
-# ─────────────────────────────────────────────
-# PROJECT PATHS
-# ─────────────────────────────────────────────
 BASE_DIR        = Path(__file__).parent.resolve()
 DATA_DIR        = BASE_DIR / "data"
 RAW_DIR         = DATA_DIR / "raw"
@@ -21,22 +13,16 @@ DB_PATH         = BASE_DIR / "alerts.db"
 for _d in [RAW_DIR, PROCESSED_DIR, DATASET_DIR, MODELS_DIR, RUNS_DIR, LOGS_DIR]:
     _d.mkdir(parents=True, exist_ok=True)
 
-# ─────────────────────────────────────────────
-# CAMERA / VIDEO INPUT
-# ─────────────────────────────────────────────
 CAMERA_ID       = 0
-FRAME_WIDTH     = 1280
-FRAME_HEIGHT    = 720
-DISPLAY_WIDTH   = 1280      # Fixed output window width
-DISPLAY_HEIGHT  = 720       # Fixed output window height
+FRAME_WIDTH     = 900
+FRAME_HEIGHT    = 480
+DISPLAY_WIDTH   = 900      
+DISPLAY_HEIGHT  = 480     
 TARGET_FPS      = 30
-SKIP_FRAMES     = 1         # Process every frame on demo video
+SKIP_FRAMES     = 2        
 
-# ─────────────────────────────────────────────
-# BUS / OCCUPANCY SETTINGS
-# ─────────────────────────────────────────────
 BUS_ID          = "BUS-001"
-MAX_CAPACITY    = 20
+MAX_CAPACITY    = 15
 WARNING_RATIO   = 0.9
 FINE_AMOUNT_INR = 500
 
@@ -46,7 +32,6 @@ OVERCROWD_THRESHOLD = MAX_CAPACITY
 # ─────────────────────────────────────────────
 # 4-MODEL ENSEMBLE CONFIGURATION
 # ─────────────────────────────────────────────
-# weight = relative importance in ensemble voting (larger = more accurate)
 MODEL_CONFIGS = [
     {
         "name"   : "yolov8n.pt",
@@ -82,36 +67,24 @@ MODEL_CONFIGS = [
 # 'weighted_mean' — balanced average
 # 'max'           — most conservative
 # 'median'        — robust to outliers
-ENSEMBLE_STRATEGY = "weighted_max"
+ENSEMBLE_STRATEGY = "primary"
 
-# ─────────────────────────────────────────────
-# DETECTION HYPER-PARAMETERS
-# ─────────────────────────────────────────────
-CONF_THRESHOLD  = 0.25      # Lower = catches more people (fewer misses)
-IOU_THRESHOLD   = 0.40      # NMS: lower = keeps more unique detections
+CONF_THRESHOLD  = 0.25      
+IOU_THRESHOLD   = 0.40      
 PERSON_CLASS_ID = 0
-IMG_SIZE        = 640
-DEVICE          = "cpu"
+IMG_SIZE        = 416
+DEVICE          = "cuda"
 
-# ─────────────────────────────────────────────
-# COUNT STABILIZATION  — fixes flickering number
-# ─────────────────────────────────────────────
-STABILIZER_WINDOW  = 20     # Smooth over last N frames
-STABILIZER_METHOD  = "median"   # 'median' | 'mean' | 'ewm'
-EWM_ALPHA          = 0.30   # For ewm: lower = smoother (more lag)
+STABILIZER_WINDOW  = 20     
+STABILIZER_METHOD  = "median"   
+EWM_ALPHA          = 0.30   
 
-# ─────────────────────────────────────────────
-# DEEPSORT TRACKING  (tuned for seated passengers)
-# ─────────────────────────────────────────────
 DEEPSORT_MAX_AGE         = 60   # Keep tracks alive longer for seated people
 DEEPSORT_N_INIT          = 2    # Confirm track after 2 frames (was 3)
 DEEPSORT_MAX_IOU_DIST    = 0.8
 DEEPSORT_MAX_COSINE_DIST = 0.5
 DEEPSORT_NN_BUDGET       = 200
 
-# ─────────────────────────────────────────────
-# ALERT SETTINGS
-# ─────────────────────────────────────────────
 ALERT_COOLDOWN_SEC       = 30
 CONSECUTIVE_FRAMES_ALERT = 8
 
@@ -119,18 +92,12 @@ FLASK_HOST  = "0.0.0.0"
 FLASK_PORT  = 5000
 FLASK_DEBUG = False
 
-# ─────────────────────────────────────────────
-# LOGGING
-# ─────────────────────────────────────────────
 LOG_LEVEL     = "INFO"
 LOG_TO_FILE   = True
 LOG_FILE      = LOGS_DIR / "app.log"
 LOG_ROTATION  = "10 MB"
 LOG_RETENTION = "7 days"
 
-# ─────────────────────────────────────────────
-# VISUALIZATION
-# ─────────────────────────────────────────────
 SHOW_LIVE_FEED  = True
 SAVE_ALERTS_IMG = True
 ALERTS_IMG_DIR  = BASE_DIR / "alert_snapshots"
