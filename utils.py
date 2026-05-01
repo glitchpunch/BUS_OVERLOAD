@@ -1,8 +1,3 @@
-# ============================================================
-# utils.py — Shared Utilities  v2.0
-# New: CountStabilizer | Capacity progress bar | Model HUD
-# ============================================================
-
 import sqlite3
 import time
 import datetime
@@ -15,10 +10,6 @@ from typing import List, Tuple, Optional, Dict
 import config
 from logger import logger
 
-
-# ─────────────────────────────────────────────
-# COUNT STABILIZER  — fixes flickering numbers
-# ─────────────────────────────────────────────
 
 class CountStabilizer:
     """
@@ -72,11 +63,6 @@ class CountStabilizer:
         self._buffer.clear()
         self._initialized = False
 
-
-# ─────────────────────────────────────────────
-# WEIGHTED ENSEMBLE COUNT
-# ─────────────────────────────────────────────
-
 def ensemble_count(
     counts  : List[int],
     weights : Optional[List[int]] = None,
@@ -107,16 +93,10 @@ def ensemble_count(
         total_w   = sum(w)
         w_avg     = sum(c * wt for c, wt in zip(counts, w)) / total_w
         if strategy == "weighted_max":
-            # Bias toward ceiling — err on the side of more people
             return int(np.ceil(w_avg))
         return int(round(w_avg))
 
     return round(sum(counts) / len(counts))
-
-
-# ─────────────────────────────────────────────
-# DATABASE
-# ─────────────────────────────────────────────
 
 def init_db() -> sqlite3.Connection:
     conn = sqlite3.connect(str(config.DB_PATH), check_same_thread=False)
@@ -162,11 +142,6 @@ def fetch_recent_events(conn, limit=50):
     )
     cols = [d[0] for d in cur.description]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
-
-
-# ─────────────────────────────────────────────
-# ALERT MANAGER
-# ─────────────────────────────────────────────
 
 class AlertManager:
     def __init__(self, conn):
@@ -400,18 +375,103 @@ def blur_faces(frame: np.ndarray) -> np.ndarray:
 # ─────────────────────────────────────────────
 
 class FPSMeter:
-    def __init__(self, window: int = 30):
+    """
+    Rolling-average FPS meter with per-component latency tracking.
+
+    Usage:
+        meter = FPSMeter()
+        fps   = meter.tick()               # call once per processed frame
+        meter.record("yolov8n", 0.045)     # record a model latency (seconds)
+        meter.draw_overlay(display, fps)   # draw on the DISPLAY frame
+    """
+
+    def __init__(self, window: int = 60):
         self._times: collections.deque = collections.deque(maxlen=window)
+        self._latencies: dict = collections.defaultdict(
+            lambda: collections.deque(maxlen=30)
+        )
+        self._fps_log: list = []
+
 
     def tick(self) -> float:
-        self._times.append(time.perf_counter())
+        now = time.perf_counter()
+        self._times.append(now)
+
         if len(self._times) < 2:
-            return 0.0
+            return 20.0  
+
         elapsed = self._times[-1] - self._times[0]
-        return (len(self._times) - 1) / elapsed if elapsed > 0 else 0.0
+        fps = (len(self._times) - 1) / elapsed if elapsed > 0 else 0.0   
+
+        self._fps_log.append((now, fps))
+        return fps
+
+    def record(self, label: str, elapsed_sec: float):
+        """Record latency for a named component (e.g. 'yolov8n')."""
+        self._latencies[label].append(elapsed_sec)
+
+    def avg_latency(self, label: str) -> float:
+        buf = self._latencies.get(label)
+        if not buf:
+            return 0.0
+        return sum(buf) / len(buf)
+
+    def draw_overlay(self, frame: np.ndarray, fps: float) -> np.ndarray:
+        """
+        Draw a dark semi-transparent FPS + latency panel on the
+        BOTTOM-RIGHT of the frame.
+        IMPORTANT: call this on the DISPLAY frame (after letterboxing),
+        NOT on the raw annotated frame — otherwise letterbox erases it.
+        """
+        h, w = frame.shape[:2]
+
+        lines = [f"FPS:  {fps:5.1f}"]
+        for label, buf in self._latencies.items():
+            if buf:
+                ms = sum(buf) / len(buf) * 1000
+                lines.append(f"{label}: {ms:5.1f} ms")
+
+        font   = cv2.FONT_HERSHEY_SIMPLEX
+        scale  = 0.52
+        thick  = 1
+        pad    = 8
+        line_h = 20
+        max_w  = max(cv2.getTextSize(l, font, scale, thick)[0][0] for l in lines)
+        box_w  = max_w + pad * 2
+        box_h  = len(lines) * line_h + pad * 2
+
+        bx = w - box_w - 10
+        by = h - box_h - 10
+
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (bx, by), (bx + box_w, by + box_h), (10, 10, 10), -1)
+        cv2.addWeighted(overlay, 0.70, frame, 0.30, 0, frame)
+        cv2.rectangle(frame, (bx, by), (bx + box_w, by + box_h), (80, 200, 160), 1)
+
+        for i, line in enumerate(lines):
+            tx = bx + pad
+            ty = by + pad + (i + 1) * line_h - 4
+            if i == 0:
+                color = (50, 220, 50) if fps >= 15 else \
+                        (0, 165, 255) if fps >= 8  else \
+                        (0, 80, 255)
+            else:
+                color = (180, 220, 180)
+            cv2.putText(frame, line, (tx, ty), font, scale, color, thick, cv2.LINE_AA)
+
+        return frame
 
     def draw(self, frame: np.ndarray, fps: float) -> np.ndarray:
-        h, w = frame.shape[:2]
-        cv2.putText(frame, f"FPS: {fps:.1f}", (w - 110, h - 12),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (160, 160, 160), 1, cv2.LINE_AA)
-        return frame
+        """Backward-compat alias — prefer draw_overlay() on the display frame."""
+        return self.draw_overlay(frame, fps)
+
+    def save_fps_log(self, path: str = "fps_log.csv"):
+        """Save full FPS history to CSV — use for your report graphs."""
+        import csv
+        with open(path, "w", newline="") as f:
+            w_csv = csv.writer(f)
+            w_csv.writerow(["timestamp_sec", "fps"])
+            t0 = self._fps_log[0][0] if self._fps_log else 0
+            for t, fps_val in self._fps_log:
+                w_csv.writerow([round(t - t0, 3), round(fps_val, 2)])
+        logger.info(f"FPS log saved: {path}")
